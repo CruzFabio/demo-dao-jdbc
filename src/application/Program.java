@@ -42,5 +42,9 @@ public class Program {
         seller.setName("Luke Blue");
         sellerDao.update(seller);
         System.out.println("Update completed!");
+
+        System.out.println("\n=== Test 6: Seller Delete ===");
+        sellerDao.deleteById(8);
+        System.out.println("Deleted completed!");
     }
 }
