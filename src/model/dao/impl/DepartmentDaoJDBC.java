@@ -74,7 +74,7 @@ public class DepartmentDaoJDBC implements DepartmentDao {
     }
 
     @Override
-    public Department findById(Integer id) {
+    public Optional<Department> findById(Integer id) {
         String sql = "SELECT * FROM department WHERE id = ?";
         try (PreparedStatement pstm = connection.prepareStatement(sql)) {
             pstm.setInt(1, id);
@@ -82,10 +82,10 @@ public class DepartmentDaoJDBC implements DepartmentDao {
             try (ResultSet rs = pstm.executeQuery()) {
                 if (rs.next()) {
                     Department dep = instantiateDepartment(rs);
-                    return dep;
+                    return Optional.of(dep);
                 }
             }
-            return null;
+            return Optional.empty();
         } catch (SQLException e) {
             throw new DbException(e.getMessage());
         }

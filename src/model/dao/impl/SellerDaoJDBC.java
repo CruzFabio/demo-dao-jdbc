@@ -7,10 +7,8 @@ import model.entities.Department;
 import model.entities.Seller;
 
 import java.sql.*;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.sql.Date;
+import java.util.*;
 
 public class SellerDaoJDBC implements SellerDao {
 
@@ -22,14 +20,8 @@ public class SellerDaoJDBC implements SellerDao {
 
     @Override
     public void insert(Seller obj) {
-        PreparedStatement pstm = null;
-        try {
-            pstm = connection.prepareStatement(
-                    "INSERT INTO seller "
-                    + "(Name, Email, BirthDate, BaseSalary, DepartmentId) "
-                    + "VALUES "
-                    + "(?, ?, ?, ?, ?)", Statement.RETURN_GENERATED_KEYS);
-
+        String sql = "INSERT INTO seller (Name, Email, BirthDate, BaseSalary, DepartmentId) VALUES (?, ?, ?, ?, ?)";
+        try (PreparedStatement pstm = connection.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
             pstm.setString(1, obj.getName());
             pstm.setString(2, obj.getEmail());
             pstm.setDate(3, new Date(obj.getBirthDate().getTime()));
@@ -39,31 +31,25 @@ public class SellerDaoJDBC implements SellerDao {
             int rowsAffected = pstm.executeUpdate();
 
             if (rowsAffected > 0) {
-                ResultSet rs = pstm.getGeneratedKeys();
-                if (rs.next()) {
-                    int id = rs.getInt(1);
-                    obj.setId(id);
+                try (ResultSet rs = pstm.getGeneratedKeys()) {
+                    if (rs.next()) {
+                        int id = rs.getInt(1);
+                        obj.setId(id);
+                    }
                 }
-                DB.closeResultSet(rs);
             } else {
                 throw new DbException("Unexpected error! No rows affected!");
             }
         } catch (SQLException e) {
             throw new DbException(e.getMessage());
-        } finally {
-            DB.closeStatement(pstm);
         }
     }
 
     @Override
     public void update(Seller obj) {
-        PreparedStatement pstm = null;
-        try {
-            pstm = connection.prepareStatement(
-                    "UPDATE seller "
-                    + "SET name = ?, Email = ?, BirthDate = ?, BaseSalary = ?, DepartmentId = ? "
-                    + "WHERE id = ?");
-
+        String sql = "UPDATE seller SET Name = ?, Email = ?, BirthDate = ?, BaseSalary = ?, DepartmentId = ? "
+                + "WHERE id = ?";
+        try (PreparedStatement pstm = connection.prepareStatement(sql)) {
             pstm.setString(1, obj.getName());
             pstm.setString(2, obj.getEmail());
             pstm.setDate(3, new Date(obj.getBirthDate().getTime()));
@@ -71,78 +57,67 @@ public class SellerDaoJDBC implements SellerDao {
             pstm.setInt(5, obj.getDepartment().getId());
             pstm.setInt(6, obj.getId());
 
-            pstm.executeUpdate();
+           int rowsAffected = pstm.executeUpdate();
+           if (rowsAffected == 0) {
+               throw new DbException("No rows affected! ID not found.");
+           }
 
         } catch (SQLException e) {
             throw new DbException(e.getMessage());
-        } finally {
-            DB.closeStatement(pstm);
         }
     }
 
     @Override
     public void deleteById(Integer id) {
-        PreparedStatement pstm = null;
-        try {
-            pstm = connection.prepareStatement("DELETE FROM seller WHERE id = ?");
-
+        String sql = "DELETE FROM seller WHERE id = ?";
+        try (PreparedStatement pstm = connection.prepareStatement(sql)) {
             pstm.setInt(1, id);
 
-            pstm.executeUpdate();
+            int rowsAffected = pstm.executeUpdate();
+            if (rowsAffected == 0) {
+                throw new DbException("No rows affected! Id not found.");
+            }
         } catch (SQLException e) {
             throw new DbException(e.getMessage());
-        } finally {
-            DB.closeStatement(pstm);
         }
     }
 
     @Override
-    public Seller findById(Integer id) {
-        PreparedStatement pstm = null;
-        ResultSet rs = null;
-        try {
-            pstm = connection.prepareStatement(
-                    "SELECT seller.*, department.Name as DepName "
-                            + "FROM seller INNER JOIN department "
-                            + "ON seller.DepartmentId = department.Id "
-                            + "WHERE seller.Id = ?");
+    public Optional<Seller> findById(Integer id) {
+        String sql = "SELECT seller.*, department.Name as DepName "
+                + "FROM seller INNER JOIN department "
+                + "ON seller.DepartmentId = department.Id "
+                + "WHERE seller.Id = ?";
 
+        try (PreparedStatement pstm = connection.prepareStatement(sql)) {
             pstm.setInt(1, id);
-            rs = pstm.executeQuery();
-
-            if (rs.next()) {
-                Department dep = instantiateDepartment(rs);
-                Seller obj = instantiateSeller(rs, dep);
-                return obj;
+            try (ResultSet rs = pstm.executeQuery()) {
+                if (rs.next()) {
+                    Department dep = instantiateDepartment(rs);
+                    Seller obj = instantiateSeller(rs, dep);
+                    return Optional.of(obj);
+                }
             }
-                return null;
+            return Optional.empty();
 
         } catch (SQLException e) {
             throw new DbException(e.getMessage());
-        } finally {
-            DB.closeStatement(pstm);
-            DB.closeResultSet(rs);
         }
     }
 
     @Override
     public List<Seller> findAll() {
-        PreparedStatement pstm = null;
-        ResultSet rs = null;
-        try {
-            pstm = connection.prepareStatement(
-                    "SELECT seller.*, department.Name as DepName "
-                            + "FROM seller INNER JOIN department "
-                            + "ON seller.DepartmentId = department.Id "
-                            + "ORDER BY Name");
-
-            rs = pstm.executeQuery();
+        String sql = "SELECT seller.*, department.Name as DepName "
+                + "FROM seller INNER JOIN department "
+                + "ON seller.DepartmentId = department.Id "
+                + "ORDER BY Name";
+        try (PreparedStatement pstm = connection.prepareStatement(sql);
+             ResultSet rs = pstm.executeQuery()) {
 
             List<Seller> list = new ArrayList<>();
             Map<Integer, Department> map = new HashMap<>();
 
             while (rs.next()) {
-
                 Department dep = map.get(rs.getInt("DepartmentId"));
 
                 if (dep == null) {
@@ -157,49 +132,38 @@ public class SellerDaoJDBC implements SellerDao {
 
         } catch (SQLException e) {
             throw new DbException(e.getMessage());
-        } finally {
-            DB.closeStatement(pstm);
-            DB.closeResultSet(rs);
         }
     }
 
     @Override
-    public List<Seller> findAllDepartment(Department department) {
-        PreparedStatement pstm = null;
-        ResultSet rs = null;
-        try {
-            pstm = connection.prepareStatement(
-                    "SELECT seller.*, department.Name as DepName "
-                            + "FROM seller INNER JOIN department "
-                            + "ON seller.DepartmentId = department.Id "
-                            + "WHERE DepartmentId = ? "
-                            + "ORDER BY Name");
-
+    public List<Seller> findByDepartment(Department department) {
+        String sql = "SELECT seller.*, department.Name as DepName "
+                + "FROM seller INNER JOIN department "
+                + "ON seller.DepartmentId = department.Id "
+                + "WHERE DepartmentId = ? "
+                + "ORDER BY Name";
+        try (PreparedStatement pstm = connection.prepareStatement(sql)) {
             pstm.setInt(1, department.getId());
-            rs = pstm.executeQuery();
 
-            List<Seller> list = new ArrayList<>();
-            Map<Integer, Department> map = new HashMap<>();
+            try (ResultSet rs = pstm.executeQuery()) {
+                List<Seller> list = new ArrayList<>();
+                Map<Integer, Department> map = new HashMap<>();
 
-            while (rs.next()) {
+                while (rs.next()) {
+                    Department dep = map.get(rs.getInt("DepartmentId"));
 
-                Department dep = map.get(rs.getInt("DepartmentId"));
+                    if (dep == null) {
+                        dep = instantiateDepartment(rs);
+                        map.put(rs.getInt("DepartmentId"), dep);
+                    }
 
-                if (dep == null) {
-                    dep = instantiateDepartment(rs);
-                    map.put(rs.getInt("DepartmentId"), dep);
+                    Seller obj = instantiateSeller(rs, dep);
+                    list.add(obj);
                 }
-
-                Seller obj = instantiateSeller(rs, dep);
-                list.add(obj);
+                return list;
             }
-            return list;
-
         } catch (SQLException e) {
             throw new DbException(e.getMessage());
-        } finally {
-            DB.closeStatement(pstm);
-            DB.closeResultSet(rs);
         }
     }
 
